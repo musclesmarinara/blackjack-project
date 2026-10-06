@@ -19,9 +19,11 @@ jobs:
           java-version: '17'
 
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
 
       - name: Restore source
-        run: python3 Blackjack-Project-v.01-source.txt
+        run: python3 Blackjack-Project-v.01-source-1.txt
 
       - name: Test and build
         working-directory: BlackjackProject
