@@ -26,11 +26,11 @@ public final class Vision {
  private final TextRecognizer ocr=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
  public void resetOwnership(){tracker.clear();cornerSelector.clear();}
  public static final class Sample {
-  public List<List<String>> candidates=new ArrayList<>(),trackedRanks=new ArrayList<>(),ranks=new ArrayList<>(),selectedHands=new ArrayList<>();
+  public List<List<String>> candidates=new ArrayList<>(),trackedRanks=new ArrayList<>(),ranks=new ArrayList<>(),freshRanks=new ArrayList<>(),selectedHands=new ArrayList<>();
   public String diagnostic="",componentLog="",tokenLog="";public int tokens=0,rejectedRank=0,rejectedAngle=0,rejectedFace=0,rejectedPosition=0;public List<RectF> boxes=new ArrayList<>();
   public String status="",score="",error="",warning="",trackLog="";public boolean marker=false,obscured=false,selectedSafe=false;
   public int groups=0,duplicates=0;public String[] raw=new String[9];public String[][] slotText=new String[7][5];
-  Sample(){for(int i=0;i<8;i++){candidates.add(new ArrayList<>());ranks.add(new ArrayList<>());trackedRanks.add(new ArrayList<>());}}
+  Sample(){for(int i=0;i<8;i++){candidates.add(new ArrayList<>());ranks.add(new ArrayList<>());freshRanks.add(new ArrayList<>());trackedRanks.add(new ArrayList<>());}}
  }
  public Sample read(Bitmap source,Regions regions,int seat)throws Exception{return read(source,regions,seat,null);}
  public Sample read(Bitmap source,Regions r,int seat,RectF overlay)throws Exception{
@@ -101,7 +101,7 @@ public final class Vision {
   }
   s.tokenLog+=" cornerModes="+cornerSelector;
   for(TableTracker.Detection d:detections)s.candidates.get(d.seat).add(d.rank);
-  TableTracker.Result result=tracker.observe(detections,w);s.trackedRanks=result.counted;s.ranks=result.visible;s.trackLog=result.tracks;
+  TableTracker.Result result=tracker.observe(detections,w);s.trackedRanks=result.counted;s.ranks=result.visible;s.freshRanks=result.fresh;s.trackLog=result.tracks;
   s.groups=components.ambiguous>0||components.unresolvedFaces?Math.max(1,components.groups.size()):components.groups.size();
   for(Map.Entry<Integer,List<String>> e:result.hands.entrySet())if(result.owners.get(e.getKey())==seat)s.selectedHands.add(new ArrayList<>(e.getValue()));
   s.selectedSafe=!result.unsafeSeats.contains(seat)&&!result.unsafeSeats.contains(0)&&components.ambiguous==0&&!components.unresolvedFaces&&!unreadableSeats.contains(seat)&&!unreadableSeats.contains(0);
