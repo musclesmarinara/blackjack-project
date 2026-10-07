@@ -1,0 +1,9 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'com.example.blackjackoverlay'
+    signingConfigs { debug { storeFile rootProject.file('dev-signing/debug.keystore'); storePassword 'android'; keyAlias 'androiddebugkey'; keyPassword 'android' } }
+    compileSdk 35
+    defaultConfig { applicationId 'com.example.blackjackoverlay'; minSdk 26; targetSdk 35; versionCode 10; versionName 'v.01' }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies { implementation 'com.google.mlkit:text-recognition:16.0.1' }

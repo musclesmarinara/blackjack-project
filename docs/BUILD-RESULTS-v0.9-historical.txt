@@ -1,0 +1,15 @@
+Build: 2026-10-03
+assembleDebug lintDebug: PASS
+0 errors, 16 warnings
+Pure Java regression suites: 9 PASS
+APK package: com.example.blackjackoverlay
+Version: 0.9-repair (9)
+Minimum SDK: 26; target SDK: 35
+APK SHA-256: cdee492fa42205fca666b24b3f189cc7891cca07dd23deea231648308cd7ec52
+
+Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+Signer #1 certificate SHA-256 digest: 174e3cba12103750bbe10c41c11fb624f5b7f4f4471555892c62e08ba5b38a89
+Signer #1 certificate SHA-1 digest: e760472f9b46b3307685fe1007aeb99019c8cfa3
+Signer #1 certificate MD5 digest: 72346c282274fcb04b232f9b93a15a7b
+
+Recognition acceptance: NOT PASSED. See VALIDATION.md.

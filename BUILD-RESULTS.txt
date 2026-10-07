@@ -1,0 +1,8 @@
+Blackjack Project v.01 — 2026-10-06
+Version code: 10
+Nine pure-Java regression suites: PASS
+Android assembleDebug / lintDebug: BLOCKED (Gradle download: Network is unreachable)
+Android SDK: not installed in this environment
+APK: NOT PRODUCED
+Device/image recognition acceptance: NOT VALIDATED
+No previous binary hash or signature result applies to this version.

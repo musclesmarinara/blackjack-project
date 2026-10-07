@@ -1,0 +1,7 @@
+PASS: 31 core checks
+PASS: 238 layout assertions
+PASS: 25 scanner/filter checks
+PASS: 13 grouping/round checks
+PASS: 7 identity checks
+PASS: round-block and pre-round identity-reset regressions
+PASS: 13 table tracker checks
