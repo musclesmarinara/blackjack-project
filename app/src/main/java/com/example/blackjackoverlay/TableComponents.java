@@ -59,7 +59,14 @@ public final class TableComponents {
      int delta=Math.max(Math.abs(((c>>16)&255)-((ref>>16)&255)),Math.max(Math.abs(((c>>8)&255)-((ref>>8)&255)),Math.abs((c&255)-(ref&255))));if(delta>=35)changedPixels++;
     }if(changedPixels<group.area*.18f)continue;
    }
-   if(group.area<w*w*(background==null?.00065f:.00020f)||bw<w*(background==null?.025f:.015f)||bh<w*(background==null?.018f:.008f)||group.area<(bw*bh)*.32f){rejectedSmall++;if(group.area>w*w*.00015f&&bw>w*.012f&&bh>w*.012f)unresolvedFaces=true;continue;}
+   // Min-area cutoff (with a learned reference) was .00020f. One real session's
+   // diagnostics showed the smallest EVER-accepted real card corner measured
+   // only ~7% above that exact cutoff (111 vs ~104 at this resolution), with an
+   // average of 10+ blobs/frame rejected as "small" -- real borderline corners
+   // (cards further from camera, partly covered, steep angle) were very likely
+   // being thrown out before OCR ever saw them. Width/height/fill-ratio checks
+   // below are unchanged and still filter genuine noise.
+   if(group.area<w*w*(background==null?.00065f:.00010f)||bw<w*(background==null?.025f:.015f)||bh<w*(background==null?.018f:.008f)||group.area<(bw*bh)*.32f){rejectedSmall++;if(group.area>w*w*.00015f&&bw>w*.012f&&bh>w*.012f)unresolvedFaces=true;continue;}
    if(bw>w*.24f||bh>w*.23f){ambiguous++;continue;}
    int enclosed=0;for(float[] a:anchors)if(a[0]>=group.left&&a[0]<=group.right&&a[1]>=group.top&&a[1]<=group.bottom)enclosed++;
    if(enclosed>1){ambiguous++;continue;}
