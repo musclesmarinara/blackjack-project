@@ -45,6 +45,14 @@ public final class Vision {
   // Stable left-to-right component ordering for split-hand selection in this frame.
   components.groups.sort(Comparator.comparingDouble(g->g.cx()));
   List<OrientedRead> readings=new ArrayList<>();List<TableTracker.Detection> detections=new ArrayList<>();int groupId=0;Set<Integer> unreadableSeats=new HashSet<>();
+  // Phase 1: build every region's crop and DISPATCH its OCR call without waiting.
+  // ML Kit's TextRecognizer client supports concurrent in-flight process() calls
+  // against one shared client -- each call returns independently, backed by the
+  // client's own executor. Doing this sequentially (crop, await, crop, await...)
+  // was the main driver of real-world cycle time on a busy multi-hand table: 9
+  // regions meant 9 full round-trips end to end instead of 9 running at once.
+  final class Pending{int id;TableComponents.Group g;Bitmap crop;Matrix inverse;Task<Text> task;}
+  List<Pending> pending=new ArrayList<>();
   for(TableComponents.Group g:components.groups){
    int id=++groupId;s.boxes.add(new RectF(g.left/(float)w,g.top/(float)h,(g.right+1f)/w,(g.bottom+1f)/h));
    Rect box=new Rect(Math.max(0,(int)(g.left/scale)-4),Math.max(0,(int)(g.top/scale)-4),Math.min(source.getWidth(),(int)((g.right+1)/scale)+4),Math.min(source.getHeight(),(int)((g.bottom+1)/scale)+4));
@@ -56,20 +64,32 @@ public final class Vision {
    transform.postTranslate(-rotated.left,-rotated.top);float zoom=Math.min(6,960f/Math.max(rotated.width(),rotated.height()));transform.postScale(zoom,zoom);
    Bitmap crop=Bitmap.createBitmap(Math.max(8,(int)Math.ceil(rotated.width()*zoom)),Math.max(8,(int)Math.ceil(rotated.height()*zoom)),Bitmap.Config.ARGB_8888);
    Canvas canvas=new Canvas(crop);canvas.drawColor(Color.BLACK);canvas.save();canvas.concat(transform);canvas.clipRect(box);canvas.drawBitmap(source,0,0,new Paint(3));canvas.restore();
-   Matrix inverse=new Matrix();transform.invert(inverse);int before=readings.size();
+   Matrix inverse=new Matrix();transform.invert(inverse);
+   Pending p=new Pending();p.id=id;p.g=g;p.crop=crop;p.inverse=inverse;p.task=ocr.process(InputImage.fromBitmap(crop,0));
+   pending.add(p);
+  }
+  // Phase 2: await each dispatched call (already running) and process its result.
+  for(Pending p:pending){
+   int before=readings.size();
    try{
-    Text text=Tasks.await(ocr.process(InputImage.fromBitmap(crop,0)),timeoutSeconds,java.util.concurrent.TimeUnit.SECONDS);
-    s.raw[g.owner]=(s.raw[g.owner]==null?"":s.raw[g.owner]+" | ")+text.getText();
+    Text text=Tasks.await(p.task,timeoutSeconds,java.util.concurrent.TimeUnit.SECONDS);
+    s.raw[p.g.owner]=(s.raw[p.g.owner]==null?"":s.raw[p.g.owner]+" | ")+text.getText();
     for(Text.TextBlock block:text.getTextBlocks())for(Text.Line line:block.getLines())for(Text.Element e:line.getElements()){
-     s.tokens++;s.tokenLog+="seat="+g.owner+" text="+e.getText()+" angle="+e.getAngle()+" confidence="+e.getConfidence()+" bounds="+e.getBoundingBox()+";";
+     s.tokens++;s.tokenLog+="seat="+p.g.owner+" text="+e.getText()+" angle="+e.getAngle()+" confidence="+e.getConfidence()+" bounds="+e.getBoundingBox()+";";
      if(CountEngine.parseRank(e.getText())!=null){
-      addRank(s,readings,e.getText(),e.getBoundingBox(),e.getAngle(),e.getConfidence(),crop,inverse,components,g,scale,id);
-     }else{
-      for(Text.Symbol symbol:e.getSymbols())addRank(s,readings,symbol.getText(),symbol.getBoundingBox(),symbol.getAngle(),symbol.getConfidence(),crop,inverse,components,g,scale,id);
+      addRank(s,readings,e.getText(),e.getBoundingBox(),e.getAngle(),e.getConfidence(),p.crop,p.inverse,components,p.g,scale,p.id);
+     }else if(e.getText()!=null&&e.getText().trim().length()<=2){
+      // Short unmatched text (a rank glyph glued to a misread suit icon, e.g. "7♣")
+      // is still worth trying symbol-by-symbol. 3+ real characters that don't form
+      // one exact rank are almost always two distinct cards whose corners merged
+      // into one OCR line on a crowded table (e.g. "6A4") -- splitting THAT into
+      // separate symbols manufactures phantom cards rather than reading a real one,
+      // so we leave it alone instead of guessing which characters are real.
+      for(Text.Symbol symbol:e.getSymbols())addRank(s,readings,symbol.getText(),symbol.getBoundingBox(),symbol.getAngle(),symbol.getConfidence(),p.crop,p.inverse,components,p.g,scale,p.id);
      }
     }
-   }finally{crop.recycle();}
-   if(readings.size()==before)unreadableSeats.add(g.owner);
+   }finally{p.crop.recycle();}
+   if(readings.size()==before)unreadableSeats.add(p.g.owner);
   }
   // Hold one printed-corner orientation per seat until a confirmed table clear.
   // This is an orientation filter, not proof of physical-card identity.
@@ -86,7 +106,14 @@ public final class Vision {
   for(Map.Entry<Integer,List<String>> e:result.hands.entrySet())if(result.owners.get(e.getKey())==seat)s.selectedHands.add(new ArrayList<>(e.getValue()));
   s.selectedSafe=!result.unsafeSeats.contains(seat)&&!result.unsafeSeats.contains(0)&&components.ambiguous==0&&!components.unresolvedFaces&&!unreadableSeats.contains(seat)&&!unreadableSeats.contains(0);
   if(result.uncertain)s.warning=result.reason;
-  if(components.ambiguous>0||components.unresolvedFaces||!unreadableSeats.isEmpty())s.warning="Unresolved card regions: review required; advice withheld";
+  // Was: fired if ANY of up to 7 other seats had a noisy/unreadable read this
+  // cycle, regardless of whether that affected your seat's own advice. On a
+  // busy multi-hand table that's nearly always true somewhere -- measured at
+  // 86% of samples in one real session -- so it drowned out the status line
+  // almost every cycle even when your own hand was perfectly clean. Scoped to
+  // match s.selectedSafe above: only warn when it's actually the dealer or
+  // your selected seat that's ambiguous/unreadable.
+  if(components.ambiguous>0||components.unresolvedFaces||unreadableSeats.contains(seat)||unreadableSeats.contains(0))s.warning="Unresolved card regions: review required; advice withheld";
   Rect status=r.pixels(8,source.getWidth(),source.getHeight());
   if(status.width()>0&&status.height()>0&&(overlay==null||!RectF.intersects(new RectF(status),overlay))){
    Bitmap b=r.boxCrop(source,8);try{s.status=Tasks.await(ocr.process(InputImage.fromBitmap(b,0)),timeoutSeconds,java.util.concurrent.TimeUnit.SECONDS).getText();s.raw[8]=s.status;}finally{b.recycle();}
