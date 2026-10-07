@@ -40,7 +40,18 @@ public final class TableTracker {
    update(best,d);
   }
   Set<Integer> missing=new HashSet<>();for(Track t:tracks)if(t.rank!=null&&!used.contains(t))missing.add(t.seat);
-  out.unsafeSeats.addAll(missing);
+  // Was: every missing seat became unsafe unconditionally. But "missing" only
+  // means this seat's confirmed track wasn't matched THIS frame -- which also
+  // happens when NOTHING at all was read near that seat this cycle (small/
+  // distant corner, brief blur), not just when it was genuinely contradicted.
+  // One real session measured the dealer's region at 300-500px^2 versus
+  // 1000-2600px^2 for other seats, confirmed 365/602 samples yet NEVER once
+  // visible -- because every single one of those cycles flagged it unsafe here.
+  // Only treat it as unsafe if something was actually read at that seat this
+  // frame (a real conflict/occlusion); a silent frame with zero information
+  // isn't evidence the card moved or changed, so the existing confirmed rank
+  // stays trusted.
+  for(int seat:missing)if(reads.stream().anyMatch(d->d.seat==seat))out.unsafeSeats.add(seat);
   for(int i=0;i<reads.size();i++)if(!consumed.contains(i)){
    Detection d=reads.get(i);if(missing.contains(d.seat)||out.unsafeSeats.contains(d.seat))continue;
    Track t=new Track();t.id=next++;t.seat=d.seat;tracks.add(t);update(t,d);
