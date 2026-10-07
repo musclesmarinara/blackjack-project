@@ -84,7 +84,8 @@ public final class CaptureService extends Service {
         if(!sample.warning.isEmpty())state.flag(sample.warning);
         if(sample.obscured){adviceSafe=false;lastValidHand=0;event("obscured",sample.warning);return;}
         boolean wasPlaying=state.inRound;
-        boolean cleared=state.scene(sample.status,sample.ranks,sample.groups,SystemClock.elapsedRealtime());
+        // Round/empty-table detection needs evidence from THIS frame (freshRanks), not the persistent view used for advice.
+        boolean cleared=state.scene(sample.status,sample.freshRanks,sample.groups,SystemClock.elapsedRealtime());
         boolean boundary=cleared||(wasPlaying&&!state.inRound)||state.shoe!=oldShoe;
         if(boundary){vision.resetOwnership();event("table_clear","Confirmed empty table; cleared visual identities, retained shoe count");}
         if(cleared||state.shoe!=oldShoe)dealerUp=null;
