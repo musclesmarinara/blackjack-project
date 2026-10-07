@@ -12,12 +12,15 @@ public final class TableTracker {
  }
  private static final class Track {long id;float x,y;int seat,group,last,streak;String candidate,rank;}
  public static final class Result {
-  public final List<List<String>> counted=new ArrayList<>(),visible=new ArrayList<>();
+  // visible: confirmed cards still tracked (persist across a missed frame) -- used for advice/dealer-up.
+  // fresh: confirmed cards actually re-read in THIS frame -- the only valid evidence that cards are
+  // physically on the table right now, so it is what empty-table/round detection must use.
+  public final List<List<String>> counted=new ArrayList<>(),visible=new ArrayList<>(),fresh=new ArrayList<>();
   public final Map<Integer,List<String>> hands=new TreeMap<>();
   public final Map<Integer,Integer> owners=new HashMap<>();
   public final Set<Integer> unsafeSeats=new HashSet<>();
   public boolean uncertain;public String reason="";public String tracks="";
-  Result(){for(int i=0;i<8;i++){counted.add(new ArrayList<>());visible.add(new ArrayList<>());}}
+  Result(){for(int i=0;i<8;i++){counted.add(new ArrayList<>());visible.add(new ArrayList<>());fresh.add(new ArrayList<>());}}
  }
  private final List<Track> tracks=new ArrayList<>();private int frame;private long next=1;
  public void clear(){tracks.clear();frame=0;}
@@ -77,6 +80,11 @@ public final class TableTracker {
    // it's re-read.
    if(t.rank!=null&&!out.unsafeSeats.contains(t.seat)){
     out.visible.get(t.seat).add(t.rank);out.hands.computeIfAbsent(t.group,k->new ArrayList<>()).add(t.rank);out.owners.put(t.group,t.seat);
+    // Confirmed tracks never expire on their own (only tracker.clear() removes them), so a card left
+    // over from the previous round stays "visible" forever. If scene() were fed `visible`, a stale
+    // dealer track would make the table never look empty, so it would never clear, the old tracks would
+    // never reset, and every card of the next round would collide with them and be dropped.
+    if(t.last==frame)out.fresh.get(t.seat).add(t.rank);
    }
   }
   out.uncertain=!out.unsafeSeats.isEmpty();
