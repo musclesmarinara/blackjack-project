@@ -45,13 +45,26 @@ public final class TableTracker {
    Detection d=reads.get(i);if(missing.contains(d.seat)||out.unsafeSeats.contains(d.seat))continue;
    Track t=new Track();t.id=next++;t.seat=d.seat;tracks.add(t);update(t,d);
   }
-  // Confirmation is consecutive and suppressed for ambiguous seats.
-  for(Track t:tracks)if(t.last==frame&&t.rank==null&&t.streak>=3&&!out.unsafeSeats.contains(t.seat))t.rank=t.candidate;
+  // Confirmation is consecutive and suppressed for ambiguous seats. Was streak>=3;
+  // at the real-world ~0.8s/cycle this measured on a busy multi-hand table, that
+  // was ~2.4s a card had to stay unmoved and unobstructed before it ever counted,
+  // which is long enough that quickly-covered cards never got confirmed at all.
+  // Dropping to 2 still requires one independent repeat (rules out a single bad
+  // OCR frame) while roughly halving that dwell time.
+  for(Track t:tracks)if(t.last==frame&&t.rank==null&&t.streak>=2&&!out.unsafeSeats.contains(t.seat))t.rank=t.candidate;
   tracks.removeIf(t->t.rank==null&&frame-t.last>3);
   StringBuilder log=new StringBuilder();
   for(Track t:tracks){
    if(t.rank!=null){out.counted.get(t.seat).add(t.rank);log.append(t.id).append(':').append(t.seat).append(':').append(t.rank).append('@').append(Math.round(t.x)).append(',').append(Math.round(t.y)).append(';');}
-   if(t.last==frame&&t.rank!=null&&!out.unsafeSeats.contains(t.seat)){
+   // Was t.last==frame: required a confirmed card to be freshly re-OCR'd in this
+   // EXACT frame to count as "visible" -- which is what dealerUp/advice is built
+   // from. That's a much stricter bar than staying in `tracks` (confirmed cards
+   // persist for up to 3 missed frames). Measured directly: the dealer's card was
+   // confirmed in 173/529 samples one real session but was "visible" in ZERO of
+   // them, so dealerUp could never be set and advice never fired. A confirmed
+   // card should stay visible for as long as it's tracked, not just the instant
+   // it's re-read.
+   if(t.rank!=null&&!out.unsafeSeats.contains(t.seat)){
     out.visible.get(t.seat).add(t.rank);out.hands.computeIfAbsent(t.group,k->new ArrayList<>()).add(t.rank);out.owners.put(t.group,t.seat);
    }
   }
